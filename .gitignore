@@ -1,3 +1,9 @@
+# sandbox using throwaway credentials
+SandboxVersion/
+
 # login credentials
 loginReddit.py
 loginTwitter.py
+
+# garbage
+__pycache__/
