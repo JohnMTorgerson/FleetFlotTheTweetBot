@@ -4,6 +4,7 @@ SandboxVersion/
 # login credentials
 loginReddit.py
 loginTwitter.py
+loginImgur.py
 
 # garbage
 __pycache__/
