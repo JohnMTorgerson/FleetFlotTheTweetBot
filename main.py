@@ -2,9 +2,12 @@
 
 import praw # reddit api wrapper
 import tweepy # twitter api wrapper
+import imgurpython # imgur api wrapper
+import gfycat # gfycat api wrapper
 import login # our custom login object for all the api's we need
-import re
-import time
+import re # regex
+import time # time
+import json # to display data for debugging
 from pprint import pprint
 import warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -14,25 +17,35 @@ botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = 'FleetFlotTheTweetBot' # the subreddit we're operating on
 
 # login and get the subreddit object
-r = login.reddit() # login to our account
-subreddit = r.get_subreddit(subName)
+try:
+	r = login.reddit() # login to our account
+except:
+	raise SystemExit('Error: could not log in to Reddit!') # for now, if we can't deal with reddit, just stop altogether, and let it try again next time
+else:
+	subreddit = r.get_subreddit(subName)
 
 # login and get the twitter object
 t = login.twitter()
 
+# login and get the imgur object
+i = login.imgur()
+
 # find any submissions in this subreddit that are links to twitter.com
 # and reply to them
 def replyToTwitterPosts() :
-	for s in subreddit.get_new(limit=50) :
-		pprint('-----------------------------------')
-		pprint('SUBMISSION TITLE: ' + s.title)
-		if s.domain == 'twitter.com' and not alreadyDone(s) :
-			addComment(s)
+	try:
+		for s in subreddit.get_new(limit=50) :
+			pprint('-----------------------------------')
+			pprint('SUBMISSION TITLE: ' + s.title)
+			if s.domain == 'twitter.com':# and not alreadyDone(s) :
+				addComment(s)
+	except praw.errors.InvalidSubreddit:
+		raise SystemExit('Error: invalid subreddit!') # for now, if we can't deal with reddit, just stop altogether, and let it try again next time
 
 # return True if we've already replied to this submission
 def alreadyDone(s) :
 	s.replace_more_comments(limit=None, threshold=0)
-	for comment in s.comments :
+	for comment in s.comments : # loop through all the top-level comments
 		# if we wrote this top-level comment
 		if comment.author.name == botName :
 			return True
@@ -41,19 +54,101 @@ def alreadyDone(s) :
 # reply to the submission with the contents of the tweet
 def addComment(s) :
 	tweet = getTweet(s.url, s.title) # return tweet object
-	pprint('replying to ' + s.title)
-	s.add_comment(redditEscape(tweet.text))
+	if tweet != None : # if we were able to find a tweet
+		tweetMedia = getTweetMedia(tweet) # find any media in the tweet and return as list
+		
+		# the following commented code is just for testing, to view the whole json object of a tweet:
+#		if s.url == 'https://twitter.com/Vikings/status/780414465095393284' :
+#		json.dumps(tweet)
+#		exit()
+
+		pprint('title:' + s.title)
+		
+		# --- FORMAT COMMENT --- #
+		lineSep = "--------------------"
+		# Text
+		comment = redditEscape(tweet.text) + "\n\n" + lineSep + "\n\n"
+		# Media
+		if len(tweetMedia) > 0 : # if there's any media, display links
+			comment += "Media:\n\n"
+			for url in tweetMedia :
+				comment += url + "\n\n"
+			comment += lineSep + "\n\n"
+		# Disclaimer
+		comment += "^^I ^^am ^^a ^^bot"
+		
+		# comment out the actual posting functionality during testing:
+		# post comment
+#		pprint(comment)
+#		s.add_comment(comment)
+	else : # we couldn't find a tweet
+		# log error here
+		pprint('Couldn\'t find tweet id!')
+	
 
 # get the contents of the tweet
+# if we can't find the tweet, return None
 def getTweet(url, title) :
 	# first find the tweet id from the url
 	pprint(url)
-	regex = re.compile(r"(?<=\/)(\d+)$") # regex pattern to find the tweet id from the url
-	id = re.search(regex,url).group(1)
+	regex = re.compile(r"(?<=\/status\/)(\d+)") # regex pattern to find the tweet id from the url
+	matches = re.search(regex,url)
+	if hasattr(matches, 'group') : # if we have a regex match
+		id = matches.group(1) # extract the id
+		try:
+			tweet = t.get_status(id) # get the actual tweet
+		except:
+			raise SystemExit('Error: could not get tweet!') # for now, if we can't deal with twitter, just stop altogether, and let it try again next time
+		else:
+			return tweet # return it
+	else :
+		return None # we couldn't find the tweet from the url
 	
-	# now get the actual tweet and return it
-	tweet = t.get_status(id)
-	return tweet
+# find any media in the tweet that we care about (e.g. pics, videos)
+# and return all of it as a list
+def getTweetMedia(tweet) :
+	tweetMedia = [] # list in which we'll store the media
+
+	# find any media and add to tweetMedia
+	if hasattr(tweet,'extended_entities') and 'media' in tweet.extended_entities : # if we have any media at all?
+		for ent in tweet.extended_entities['media'] : # loop through all the media and add them to tweetMedia
+			
+			# GIF or VIDEO
+			if 'video_info' in ent : # if the media is a gif or a video
+				variants = ent['video_info']['variants'] # array of different variants (file types/resolutions/etc)
+				
+				# GIF
+				if ent['type'] == 'animated_gif' : # it's a gif (but is probably actually a silent mp4)
+					for variant in variants :
+						if variant['content_type'] == 'video/mp4' :
+							tweetMedia.append(variant['url'])
+							pprint('GIF - url:' + tweetMedia[len(tweetMedia)-1])
+							break
+					else : # if we didn't find anything
+						pprint("GIF, didn't recognize content_type")
+						
+				# VIDEO
+				elif ent['type'] == 'video' :
+					for variant in variants :
+						if variant['content_type'] == 'video/mp4' :
+							tweetMedia.append(variant['url'])
+							pprint('VIDEO - url:' + tweetMedia[len(tweetMedia)-1])
+							break
+					else : # if we didn't find anything
+						pprint("VIDEO, didn't recognize content_type")
+						
+			# IMAGE
+			elif 'media_url_https' in ent : # if not, the media is a static image
+				tweetMedia.append(ent['media_url_https'])
+				pprint('PICTURE - media_url_https:' + tweetMedia[len(tweetMedia)-1])
+			else : # if we're here, there's no media at all
+				pprint('extended_entities, but no video_info or media_url_https???')
+				
+	else : # we didn't find any media
+		pprint('no extended_entities at all!!!')
+		
+	return tweetMedia
+	
 	
 # escape any reddit markdown from the string
 # (right now all this does is escape '#' from the beginning of a line)

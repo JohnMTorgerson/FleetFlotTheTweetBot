@@ -15,3 +15,10 @@ def twitter() :
 	auth.set_access_token(loginTwitter.access_token, loginTwitter.access_secret)
 	t = tweepy.API(auth)
 	return t
+	
+# Imgur
+from imgurpython import ImgurClient
+import loginImgur
+def imgur() :
+	i = ImgurClient(loginImgur.app_id, loginImgur.app_secret)
+	return i
