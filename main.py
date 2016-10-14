@@ -58,8 +58,9 @@ def addComment(s) :
 		tweetMedia = getTweetMedia(tweet) # find any media in the tweet and return as list
 		
 		# the following commented code is just for testing, to view the whole json object of a tweet:
-#		if s.url == 'https://twitter.com/Vikings/status/780414465095393284' :
+#		print('\n\n\n')
 #		json.dumps(tweet)
+#		print('\n\n\n')
 #		exit()
 
 		pprint('title:' + s.title)
@@ -105,7 +106,7 @@ def getTweet(url, title) :
 		return None # we couldn't find the tweet from the url
 	
 # find any media in the tweet that we care about (e.g. pics, videos)
-# and return all of it as a list
+# rehost it if possible, and return all of it as a list
 def getTweetMedia(tweet) :
 	tweetMedia = [] # list in which we'll store the media
 
@@ -121,8 +122,11 @@ def getTweetMedia(tweet) :
 				if ent['type'] == 'animated_gif' : # it's a gif (but is probably actually a silent mp4)
 					for variant in variants :
 						if variant['content_type'] == 'video/mp4' :
-							tweetMedia.append(variant['url'])
-							pprint('GIF - url:' + tweetMedia[len(tweetMedia)-1])
+							url = variant['url']
+							pprint('GIF - url:' + url)
+							# eventually, we'll want to rehost the gif and then append it to tweetMedia
+							# in the mean time, we will not append the original url
+							# tweetMedia.append(url)
 							break
 					else : # if we didn't find anything
 						pprint("GIF, didn't recognize content_type")
@@ -131,16 +135,30 @@ def getTweetMedia(tweet) :
 				elif ent['type'] == 'video' :
 					for variant in variants :
 						if variant['content_type'] == 'video/mp4' :
-							tweetMedia.append(variant['url'])
-							pprint('VIDEO - url:' + tweetMedia[len(tweetMedia)-1])
+							url = variant['url']
+							pprint('VIDEO - url:' + url)
+							# eventually, we'll want to rehost the video and then append it to tweetMedia
+							# in the mean time, we will not append the original url
+							# tweetMedia.append(url)
 							break
 					else : # if we didn't find anything
 						pprint("VIDEO, didn't recognize content_type")
 						
 			# IMAGE
 			elif 'media_url_https' in ent : # if not, the media is a static image
-				tweetMedia.append(ent['media_url_https'])
-				pprint('PICTURE - media_url_https:' + tweetMedia[len(tweetMedia)-1])
+				url = ent['media_url_https']
+				pprint('PICTURE - media_url_https:' + url)
+				# rehost static image on imgur
+				try:
+					imgurURL = getImgurURL(url)
+				except ImgurClientError as e:
+					# before production, log this message instead of printing it:
+					pprint("ERROR! Could not upload static image to imgur: " + e.error_message + ' ' + e.status_code)
+				else:
+					# if successful, append the imgur URL to the tweetMedia list
+					tweetMedia.append(imgurURL)
+					pprint('successfully uploaded to imgur: ' + imgurURL)
+				
 			else : # if we're here, there's no media at all
 				pprint('extended_entities, but no video_info or media_url_https???')
 				
@@ -149,6 +167,12 @@ def getTweetMedia(tweet) :
 		
 	return tweetMedia
 	
+# given a url to a (static) image, upload to imgur and return the imgur url
+def getImgurURL(url) :
+	ext = re.search("\.([a-zA-Z0-9]{3,4})$",url).group(1) # find the file extension
+	upload = i.upload_from_url(url, config=None, anon=True)
+	imgurURL = "http://imgur.com/" + upload['id'] + "." + ext
+	return imgurURL
 	
 # escape any reddit markdown from the string
 # (right now all this does is escape '#' from the beginning of a line)
