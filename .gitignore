@@ -6,5 +6,8 @@ loginReddit.py
 loginTwitter.py
 loginImgur.py
 
+# log file used during testing; don't want to overwrite the real one
+fleetflot.log
+
 # garbage
 __pycache__/

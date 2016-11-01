@@ -22,3 +22,5 @@ import loginImgur
 def imgur() :
 	i = ImgurClient(loginImgur.app_id, loginImgur.app_secret)
 	return i
+	
+	
