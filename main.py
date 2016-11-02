@@ -13,6 +13,7 @@ import json # to display data for debugging
 from pprint import pprint
 import warnings
 import logging
+import logging.handlers
 
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
@@ -24,17 +25,24 @@ warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 # configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-handler = logging.FileHandler('fleetflot.log')
-handler.setLevel(logging.INFO)
+# timed rotating handler to log to file at INFO level, rotate every 1 days
+main_handler = logging.handlers.TimedRotatingFileHandler('logs/main_log.log',when="d",interval=1)
+main_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+main_handler.setFormatter(formatter)
+logger.addHandler(main_handler)
+# handler to log to a different file at ERROR level
+error_handler = logging.FileHandler('logs/error_log.log')
+error_handler.setLevel(logging.ERROR)
+formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
+error_handler.setFormatter(formatter)
+logger.addHandler(error_handler)
 
 # login to reddit
 try: 
 	r = login.reddit() # login to our account
 except praw.errors.PRAWException as e:
-	logger.error('EXITING! Couldn\'t log in to reddit: %s %s',e.message,e.url)
+	logger.critical('EXITING! Couldn\'t log in to reddit: %s %s',e.message,e.url)
 	raise SystemExit('Quitting - could not log in to Reddit!') # if we can't deal with reddit, just stop altogether, and let it try again next time
 
 # login to twitter
@@ -54,13 +62,13 @@ def main() :
 	try:
 		subreddit = r.get_subreddit(subName,fetch=True) # fetch=True is necessary to test if we've really got a real subreddit
 	except praw.errors.PRAWException as e:
-		logger.error('EXITING! Invalid subreddit? %s',e.message)
+		logger.critical('EXITING! Invalid subreddit? %s',e.message)
 		raise SystemExit('Quitting - invalid subreddit??') # if we can't deal with reddit, just stop altogether, and let it try again next time
 	else:
 		for s in subreddit.get_new(limit=5) :
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
-			if s.domain == 'twitter.com':# and not alreadyDone(s) :
+			if s.domain == 'twitter.com' and not alreadyDone(s) :
 				addComment(s)
 
 # return True if we've already replied to this submission
@@ -79,16 +87,16 @@ def addComment(s) :
 	try:
 		tweet = getTweet(s.url, s.title) # return tweet object
 	except AttributeError as e: # we couldn't find the tweet id from the url
-		logger.error("%s - post id:%s",e.custom,s.id) # print custom error message
+		logger.error("%s - %s",s.id,e.custom) # print custom error message
 	except tweepy.error.TweepError as e: # we couldn't find the tweet from the id
-		logger.error("%s - post id:%s",e.custom,s.id) # print custom error message
+		logger.error("%s - %s",s.id,e.custom) # print custom error message
 	else:
 		try:
 			tweetMedia = getTweetMedia(tweet) # find any media in the tweet and return as list
 		except Exception as e:
-			logger.error("Could not post tweet due to exception when finding/rehosting media - post id:%s - message:%s",s.id,str(e))
+			logger.error("%s - Could not post tweet due to exception when finding/rehosting media - message:%s",s.id,str(e))
 			if hasattr(e,'custom'):
-				logger.error("%s - post id:%s",e.custom,s.id) # print custom error message
+				logger.error("%s - %s",s.id,e.custom) # print custom error message
 		else:
 			# the following commented code is just for testing, to view the whole json object of a tweet:
 			#print('\n\n\n')
@@ -122,10 +130,10 @@ def addComment(s) :
 			comment += " ^^| ^^Skål!!"
 			
 			try:
-				pass
-				#s.add_comment(comment) # post comment to reddit
+				#pass
+				s.add_comment(comment) # post comment to reddit
 			except praw.errors.PRAWException as e:
-				logger.error('Could not comment on %s: %s',s.id,e.message)
+				logger.error('%s - Could not comment: %s',s.id,e.message)
 			else:
 				logger.info("Successfully added comment on %s!",s.id)
 
