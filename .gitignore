@@ -6,8 +6,11 @@ loginReddit.py
 loginTwitter.py
 loginImgur.py
 
-# logs directory used during testing; don't want to overwrite the real one
+# logs directory used during testing;
 logs/
+
+# logging path is different in production, so ignore that
+paths.py
 
 # garbage
 __pycache__/

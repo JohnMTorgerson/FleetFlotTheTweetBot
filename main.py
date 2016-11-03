@@ -7,6 +7,7 @@ from imgurpython.helpers.error import ImgurClientError # imgurpython errors
 from gfycat.client import GfycatClient # gfycat api wrapper
 from gfycat.error import GfycatClientError # gfycat api errors
 import login # our custom login object for all the api's we need
+import paths # links to custom paths (e.g. for the log files)
 import re # regex
 import time # time
 import json # to display data for debugging
@@ -26,13 +27,13 @@ warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 # timed rotating handler to log to file at INFO level, rotate every 1 days
-main_handler = logging.handlers.TimedRotatingFileHandler('logs/main_log.log',when="d",interval=1)
+main_handler = logging.handlers.TimedRotatingFileHandler(paths.logs + 'main_log.log',when="d",interval=1)
 main_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
 # handler to log to a different file at ERROR level
-error_handler = logging.FileHandler('logs/error_log.log')
+error_handler = logging.FileHandler(paths.logs + 'error_log.log')
 error_handler.setLevel(logging.ERROR)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 error_handler.setFormatter(formatter)
