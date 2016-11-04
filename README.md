@@ -11,7 +11,10 @@ A simple Twitter bot for /r/minnesotavikings
 ## Planned enhancements:
 
 * Rehost video links in tweets
-* Rehost twitter media linked directly in a post rather than as part of a whole tweet (i.e. twimg.com posts)
+* Supply direct links to articles that are linked to as shortened t.co urls in tweets
+* Reply to and rehost twitter media linked directly in a post rather than as part of a whole tweet (i.e. twimg.com posts)
 * Possibly reply to twitter links in comments?
+
+
 
 Modules used: praw, tweepy, imgurpython, gfycat
