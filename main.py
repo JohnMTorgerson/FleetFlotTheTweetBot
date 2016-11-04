@@ -66,7 +66,7 @@ def main() :
 		logger.critical('EXITING! Invalid subreddit? %s',e.message)
 		raise SystemExit('Quitting - invalid subreddit??') # if we can't deal with reddit, just stop altogether, and let it try again next time
 	else:
-		for s in subreddit.get_new(limit=5) :
+		for s in subreddit.get_new(limit=30) : # check the newest 30 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			if s.domain == 'twitter.com' and not alreadyDone(s) :
