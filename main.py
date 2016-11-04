@@ -111,11 +111,10 @@ def addComment(s) :
 			lineSep = "--------------------"
 			
 			# Tweet author
-			# PUT TWEET AUTHOR HERE
 			comment = "**[@" + tweet.user.screen_name + "](https://www.twitter.com/" + tweet.user.screen_name + ")** (" + tweet.user.name + "):\n\n" 
 			
 			# Text
-			comment += "> " + redditEscape(tweet.text) + "\n\n"
+			comment += re.sub(r"^","> ",redditEscape(tweet.text), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
 			
 			# Media
 			if len(tweetMedia) > 0 : # if there's any media, display links
