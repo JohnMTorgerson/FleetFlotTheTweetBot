@@ -15,6 +15,4 @@ A simple Twitter bot for /r/minnesotavikings
 * Reply to and rehost twitter media linked directly in a post rather than as part of a whole tweet (i.e. twimg.com posts)
 * Possibly reply to twitter links in comments?
 
-
-
-Modules used: praw, tweepy, imgurpython, gfycat
+Written in Python 3 using praw, tweepy, imgurpython, and gfycat
