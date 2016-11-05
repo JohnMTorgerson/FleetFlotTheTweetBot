@@ -18,7 +18,7 @@ import logging.handlers
 
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
-subName = 'FleetFlotTheTweetBot' # the subreddit we're operating on
+subName = 'minnesotavikings' # the subreddit we're operating on
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -66,7 +66,7 @@ def main() :
 		logger.critical('EXITING! Invalid subreddit? %s',e.message)
 		raise SystemExit('Quitting - invalid subreddit??') # if we can't deal with reddit, just stop altogether, and let it try again next time
 	else:
-		for s in subreddit.get_new(limit=30) : # check the newest 30 submissions
+		for s in subreddit.get_new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			if s.domain == 'twitter.com' and not alreadyDone(s) :
@@ -130,7 +130,6 @@ def addComment(s) :
 			comment += " ^^| ^^Skål!!"
 			
 			try:
-				#pass
 				s.add_comment(comment) # post comment to reddit
 			except praw.errors.PRAWException as e:
 				logger.error('%s - Could not comment: %s',s.id,e.message)
