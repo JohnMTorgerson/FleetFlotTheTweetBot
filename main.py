@@ -19,6 +19,7 @@ import logging.handlers
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = 'minnesotavikings' # the subreddit we're operating on
+domains = ['twitter.com','mobile.twitter.com'] # twitter domains to check submissions against
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -69,7 +70,7 @@ def main() :
 		for s in subreddit.get_new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
-			if s.domain == 'twitter.com' and not alreadyDone(s) :
+			if s.domain in domains and not alreadyDone(s) :
 				addComment(s)
 
 # return True if we've already replied to this submission
