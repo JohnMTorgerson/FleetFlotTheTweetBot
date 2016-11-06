@@ -100,13 +100,8 @@ def addComment(s) :
 			if hasattr(e,'custom'):
 				logger.error("%s - %s",s.id,e.custom) # print custom error message
 		else:
-			# the following commented code is just for testing, to view the whole json object of a tweet:
-			#print('\n\n\n')
-			#json.dumps(tweet)
-			#print('\n\n\n')
-			#exit()
-
 			logger.debug('title: %s',s.title)
+			logger.debug('text: %s',tweet.full_text)
 			
 			# --- FORMAT COMMENT --- #
 			lineSep = "--------------------"
@@ -115,7 +110,7 @@ def addComment(s) :
 			comment = "**[@" + tweet.user.screen_name + "](https://www.twitter.com/" + tweet.user.screen_name + ")** (" + tweet.user.name + "):\n\n" 
 			
 			# Text
-			comment += re.sub(r"^","> ",redditEscape(tweet.text), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
+			comment += re.sub(r"^","> ",redditEscape(tweet.full_text), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
 			
 			# Media
 			if len(tweetMedia) > 0 : # if there's any media, display links
@@ -128,7 +123,7 @@ def addComment(s) :
 			comment += "^^I ^^am ^^a ^^bot ^^made ^^of ^^recycled ^^Adrian ^^Peterson ^^knees"
 			comment += " ^^| [^^[message ^^me]](https://www.reddit.com/message/compose?to=FleetFlotTheTweetBot)"
 			comment += " ^^| [^^[source ^^code]](https://github.com/JohnMTorgerson/FleetFlotTheTweetBot)"
-			comment += " ^^| ^^Skål!!"
+			comment += " ^^| ^^Skål!"
 			
 			try:
 				s.add_comment(comment) # post comment to reddit
@@ -152,7 +147,7 @@ def getTweet(url, title) :
 		raise
 	else: # we found the tweet id
 		try:
-			tweet = t.get_status(id) # get the actual tweet
+			tweet = t.get_status(id, tweet_mode='extended') # get the actual tweet
 		except tweepy.error.TweepError as e: # we couldn't find the tweet from the id
 			e.custom = 'Could not find tweet for this id: ' + id + ' - Tweepy error code: ' + str(e.api_code)
 			raise
