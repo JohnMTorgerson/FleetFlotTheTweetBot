@@ -244,10 +244,17 @@ def getImgurURL(url) :
 		return imgurURL
 	
 # escape any reddit markdown from the string
-# (right now all this does is escape '#' from the beginning of a line)
 def redditEscape(string) :
-	regex = re.compile(r"(^|\n\n)#") # find '#' at beginning of string or double newline
-	string = re.sub(regex,"\#",string) # add a '\' before any matches
+	# escape leading hashtags ('#')
+	string = re.sub(r"^#","\#",string,0,re.MULTILINE)
+	
+	# delete leading spaces/tabs (so as not to trigger reddit's code formatting)
+	string = re.sub(r"^[ \t]+","",string,0,re.MULTILINE)
+
+	# double space, because reddit needs two newlines to actually display a line break
+	# (the regex actually only adds a newline at the end of a line if there's another line after it with characters in it)
+	string = re.sub(r"(?<=.(?=\n.))","\n",string,0,re.MULTILINE)
+	
 	return string
 	
 if __name__ == "__main__":
