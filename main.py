@@ -10,6 +10,7 @@ import login # our custom login object for all the api's we need
 import paths # links to custom paths (e.g. for the log files)
 import re # regex
 import time # time
+import requests
 import json # to display data for debugging
 from pprint import pprint
 import warnings
@@ -87,7 +88,7 @@ def addComment(s) :
 	logger.info("######## Found new tweet ######## REDDIT:%s TWITTER:%s", s.id, s.url ) # log the submission id and twitter URL
 
 	try:
-		tweet = getTweet(s.url, s.title) # return tweet object
+		tweet = getTweet(s.url) # return tweet object
 	except AttributeError as e: # we couldn't find the tweet id from the url
 		logger.error("%s - %s",s.id,e.custom) # print custom error message
 	except tweepy.error.TweepError as e: # we couldn't find the tweet from the id
@@ -115,8 +116,17 @@ def addComment(s) :
 			# Media
 			if len(tweetMedia) > 0 : # if there's any media, display links
 				comment += "Rehosted Media:\n\n"
-				for url in tweetMedia :
-					comment += "* " + url + "\n\n"
+				for media in tweetMedia :
+					string = ""
+					if isinstance(media,dict) : # if the media was a video, it will be a dict with possibly multiple links of different bitrates
+						for key in media :
+							string += "[[" + key + "]](" + media[key] + ") "
+						if string == "" : # i.e. if the dict was empty
+							string = "error rehosting video. Sorry!" # we should never get here, because an exception should have been raised earlier
+						string = "Video: " + string
+					else : # otherwise, we assume it's a string, a single url
+						string = media
+					comment += "* " + string + "\n\n"
 					
 			# Footer
 			comment += lineSep + "\n\n"
@@ -134,7 +144,7 @@ def addComment(s) :
 
 # get the contents of the tweet
 # if we can't find the tweet, raise an exception
-def getTweet(url, title) :
+def getTweet(url) :
 	logger.debug(url)
 
 	# first find the tweet id from the url
@@ -195,16 +205,26 @@ def getTweetMedia(tweet) :
 						
 				# VIDEO
 				elif ent['type'] == 'video' :
-					for variant in variants :
-						if variant['content_type'] == 'video/mp4' :
+					bitrate = 0
+					url = ''
+					for variant in variants : # loop through all the possible versions of the video
+						if variant['content_type'] == 'video/mp4' and variant['bitrate'] > bitrate : # save this version if it's the highest res we've seen so far
+							bitrate = variant['bitrate']
 							url = variant['url']
-							logger.debug('VIDEO - url:' + url)
-							# eventually, we'll want to rehost the video and then append it to tweetMedia
-							# in the mean time, we will just append an error message to display in our post
-							tweetMedia.append("This tweet contained a video, but I can't rehost those yet ◔̯◔ sorry!")
-							logger.warning("Cannot rehost video links yet: %s",url)
-							break
-					else : # no-break: we didn't find anything
+							logger.debug('video variants - bitrate=' + str(bitrate) + ' url=' + url)
+					if url != '' : # we found a video	
+						logger.debug('VIDEO - url:' + url)
+						
+						# rehost the video on Streamable and append urls to tweetMedia
+						try:
+							vids = getStreamableURLs(url)
+						except requests.exceptions.RequestException as e:
+							e.custom = 'Could not upload to Streamable. RequestException: ' + str(e)
+							raise
+						else:
+							tweetMedia.append(vids)
+
+					else : # we didn't find anything
 						logger.error("VIDEO found, but didn't recognize content_type: %s",ent['url'])
 						
 			# IMAGE
@@ -242,19 +262,55 @@ def getImgurURL(url) :
 		upload = i.upload_from_url(url, config=None, anon=True)
 		imgurURL = "http://imgur.com/" + upload['id'] + "." + ext
 		return imgurURL
+		
+# given a url to a twitter video, upload to streamable and return a dict with streamable urls to the video (2 videos, for desktop and mobile)
+def getStreamableURLs(url) :
+	params = {'url': url}
+	r = requests.get('https://api.streamable.com/import', params=params) # initiate upload
+		
+	shortcode = r.json()['shortcode']
 	
+	# wait until status is '2' or give up after 10 tries
+	urls = {} # we'll return this
+	tries = 10
+	while tries >=0 :
+		response = requests.get('https://api.streamable.com/videos/' + shortcode)
+		response.json()
+		status = response.json()['status']
+		files = response.json()['files']
+		if status == 2 : # success, but we still have to check to see if we have any url's yet
+			if 'mp4' in files and files['mp4'].get('url','') != '' : # we have a desktop url
+				urls['desktop'] = 'https:' + files['mp4']['url']
+			if 'mp4-mobile' in files and files['mp4-mobile'].get('url','') != '' : # we have a mobile url
+				urls['mobile'] = 'https:' + files['mp4-mobile']['url']
+				
+			# if we have both a desktop and a mobile url, break out of the loop
+			# (if we have neither or just 1 of the 2, we'll keep trying)
+			if 'desktop' in urls and 'mobile' in urls :
+				break
+		elif status == 3 : # error
+			raise requests.exceptions.RequestException("Could not upload, returned status==3!")
+			break
+		time.sleep(5) # sleep for 5 seconds and then try again
+		tries -= 1 # decrement tries
+	else : # no-break: we timed out without getting a successful response
+		raise requests.exceptions.RequestException("Could not retrieve any URLs in time, so we gave up!")
+		
+	# if we're here, we've gotten at least a desktop or a mobile url, or both
+	return urls
+
 # escape any reddit markdown from the string
 def redditEscape(string) :
 	# escape leading hashtags ('#')
 	string = re.sub(r"^#","\#",string,0,re.MULTILINE)
 	
-	# delete leading spaces/tabs (so as not to trigger reddit's code formatting)
+	# delete leading spaces/tabs (so as not to trigger reddit's 'code' formatting)
 	string = re.sub(r"^[ \t]+","",string,0,re.MULTILINE)
 
 	# double space, because reddit needs two newlines to actually display a line break
 	# (the regex actually only adds a newline at the end of a line if there's another line after it with characters in it)
 	string = re.sub(r"(?<=.(?=\n.))","\n",string,0,re.MULTILINE)
-	
+
 	return string
 	
 if __name__ == "__main__":
