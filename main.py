@@ -8,8 +8,8 @@ from gfycat.client import GfycatClient # gfycat api wrapper
 from gfycat.error import GfycatClientError # gfycat api errors
 import login # our custom login object for all the api's we need
 import paths # links to custom paths (e.g. for the log files)
-import re # regex
-import time # time
+import re
+import time
 import requests
 import json # to display data for debugging
 from pprint import pprint
@@ -111,7 +111,8 @@ def addComment(s) :
 			comment = "**[@" + tweet.user.screen_name + "](https://www.twitter.com/" + tweet.user.screen_name + ")** (" + tweet.user.name + "):\n\n" 
 			
 			# Text
-			comment += re.sub(r"^","> ",redditEscape(tweet.full_text), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
+			tweetText = re.sub(r"\bhttps?:\/\/t.co\/\w+\b",resolveLink, tweet.full_text, 0) # replace any t.co links in the tweet text with the resolved link; not only does this allow people to use them even if twitter is blocked, t.co links also probably cause reddit comments to be blocked as spam
+			comment += re.sub(r"^","> ",redditEscape(tweetText), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
 			
 			# Media
 			if len(tweetMedia) > 0 : # if there's any media, display links
@@ -134,7 +135,7 @@ def addComment(s) :
 			comment += " ^^| [^^[message ^^me]](https://www.reddit.com/message/compose?to=FleetFlotTheTweetBot)"
 			comment += " ^^| [^^[source ^^code]](https://github.com/JohnMTorgerson/FleetFlotTheTweetBot)"
 			comment += " ^^| ^^Skål!"
-			
+
 			try:
 				s.add_comment(comment) # post comment to reddit
 			except praw.errors.PRAWException as e:
@@ -272,7 +273,7 @@ def getStreamableURLs(url) :
 	
 	# wait until status is '2' or give up after 10 tries
 	urls = {} # we'll return this
-	tries = 10
+	tries = 12
 	while tries >=0 :
 		response = requests.get('https://api.streamable.com/videos/' + shortcode)
 		response.json()
@@ -313,5 +314,9 @@ def redditEscape(string) :
 
 	return string
 	
+# when passed a t.co shortlink, find and return the resolved link from the tweet entities
+# for now, though, we'll just return an empty string
+def resolveLink(shortLink) :
+	return ''
 if __name__ == "__main__":
     main()
