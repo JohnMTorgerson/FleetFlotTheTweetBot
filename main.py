@@ -49,10 +49,18 @@ except praw.errors.PRAWException as e:
 	raise SystemExit('Quitting - could not log in to Reddit!') # if we can't deal with reddit, just stop altogether, and let it try again next time
 
 # login to twitter
-t = login.twitter() # login and get the twitter object
+try: 
+	t = login.twitter() # login and get the twitter object
+except tweepy.TweepError as e:
+	logger.critical('EXITING! Couldn\'t log in to Twitter: %s',str(e))
+	raise SystemExit('Quitting - could not log in to Twitter!') # if we can't deal with Twitter, just stop altogether, and let it try again next time
 
 # login to imgur
-i = login.imgur() # login and get the imgur object
+try: 
+	i = login.imgur() # login and get the imgur object
+except ImgurClientError as e:
+	logger.critical('EXITING! Couldn\'t log in to Imgur: %s %s',str(e))
+	raise SystemExit('Quitting - could not log in to Imgur!') # if we can't deal with Imgur, just stop altogether, and let it try again next time
 
 
 
@@ -65,8 +73,8 @@ def main() :
 	try:
 		subreddit = r.get_subreddit(subName,fetch=True) # fetch=True is necessary to test if we've really got a real subreddit
 	except praw.errors.PRAWException as e:
-		logger.critical('EXITING! Invalid subreddit? %s',e.message)
-		raise SystemExit('Quitting - invalid subreddit??') # if we can't deal with reddit, just stop altogether, and let it try again next time
+		logger.critical('EXITING! Could not get subreddit %s',e.message)
+		raise SystemExit('Quitting - could not get subreddit') # if we can't deal with reddit, just stop altogether, and let it try again next time
 	else:
 		for s in subreddit.get_new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
@@ -111,9 +119,10 @@ def addComment(s) :
 			comment = "**[@" + tweet.user.screen_name + "](https://www.twitter.com/" + tweet.user.screen_name + ")** (" + tweet.user.name + "):\n\n" 
 			
 			# Text
-			tweetText = re.sub(r"\bhttps?:\/\/t.co\/\w+\b",resolveLink, tweet.full_text, 0) # replace any t.co links in the tweet text with the resolved link; not only does this allow people to use them even if twitter is blocked, t.co links also probably cause reddit comments to be blocked as spam
+			tweetText = re.sub(r"\bhttps?:\/\/t.co\/\w+\b",resolveLink(tweet), tweet.full_text, 0) # replace any t.co links in the tweet text with the resolved link; not only does this allow people to use them even if twitter is blocked, t.co links also probably cause reddit comments to be blocked as spam
 			comment += re.sub(r"^","> ",redditEscape(tweetText), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
 			
+			logger.debug('text after link replacement: ' + tweetText)
 			# Media
 			if len(tweetMedia) > 0 : # if there's any media, display links
 				comment += "Rehosted Media:\n\n"
@@ -160,7 +169,7 @@ def getTweet(url) :
 		try:
 			tweet = t.get_status(id, tweet_mode='extended') # get the actual tweet
 		except tweepy.error.TweepError as e: # we couldn't find the tweet from the id
-			e.custom = 'Could not find tweet for this id: ' + id + ' - Tweepy error code: ' + str(e.api_code)
+			e.custom = 'Could not find tweet for this id: ' + id + ' - error: ' + str(e)
 			raise
 		else:
 			return tweet # return it
@@ -315,8 +324,41 @@ def redditEscape(string) :
 	return string
 	
 # when passed a t.co shortlink, find and return the resolved link from the tweet entities
-# for now, though, we'll just return an empty string
-def resolveLink(shortLink) :
-	return ''
+# we use a closure so that we can pass the tweet object from the function call (which occurs inside re.sub as a replace function: see http://stackoverflow.com/questions/7868554/python-re-subs-replace-function-doesnt-accept-extra-arguments-how-to-avoid)
+def resolveLink(tweet) :
+	def replaceLink(matchObj) :
+		try :
+			shortLink = matchObj.group() # the t.co link
+		except Exception as e :
+			logger.error('Problem with resolving link:%s, found match but replace function failed: %s - replacing with empty string', shortLink, str(e))
+			return '' # if something was wrong with the match, just return an empty string
+		else :
+			resolvedLink = ''
+			if hasattr(tweet,'entities') and 'urls' in tweet.entities : # if we have any urls in the tweet
+				for ent in tweet.entities['urls'] : # loop through all the urls looking for our match
+					if shortLink == ent['url'] :
+						try :
+							expandedURL = ent['expanded_url'] # get expanded url
+						except KeyError as e:
+							# if no 'expanded_url' for some reason, leave resolvedLink as an empty string and return that
+							logger.error('Could not resolve shortlink:%s, no expanded_url in tweet entities; replacing with an empty string - %s', shortLink, str(e))
+						else :
+							try :
+								# format the link in reddit markup using the display_url
+								resolvedLink = '[' + ent['display_url'] + '](' + expandedURL + ')'
+							except KeyError as e :
+								# if for some reason there's no display_url, just use the raw link
+								resolvedLink = expandedURL
+						break
+				else : # no break means we didn't find the url in entities
+					# this is expected to happen with all t.co links to the tweet itself that the twitter API appends to the end of the tweet text
+					# so we'll log it, and leave resolvedLink as an empty string
+					logger.debug('Could not find shortlink:%s in the tweet entities[\'urls\']; replacing it with an empty string', shortLink)
+			else :
+				logger.error('Trying to replace shortlink:%s but tweet entities[\'urls\'] did not exist; replacing it with an empty string', shortLink)
+			return resolvedLink
+	return replaceLink
+
+
 if __name__ == "__main__":
     main()
