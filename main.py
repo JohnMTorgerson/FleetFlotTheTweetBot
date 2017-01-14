@@ -59,7 +59,7 @@ except tweepy.TweepError as e:
 try: 
 	i = login.imgur() # login and get the imgur object
 except ImgurClientError as e:
-	logger.critical('EXITING! Couldn\'t log in to Imgur: %s %s',str(e))
+	logger.critical('EXITING! Couldn\'t log in to Imgur: %s',str(e))
 	raise SystemExit('Quitting - could not log in to Imgur!') # if we can't deal with Imgur, just stop altogether, and let it try again next time
 
 
@@ -327,38 +327,63 @@ def redditEscape(string) :
 # we use a closure so that we can pass the tweet object from the function call (which occurs inside re.sub as a replace function: see http://stackoverflow.com/questions/7868554/python-re-subs-replace-function-doesnt-accept-extra-arguments-how-to-avoid)
 def resolveLink(tweet) :
 	def replaceLink(matchObj) :
+		resolvedLink = '*[error resolving url]*' # the return variable; initially set to an error message
 		try :
 			shortLink = matchObj.group() # the t.co link
 		except Exception as e :
-			logger.error('Problem with resolving link:%s, found match but replace function failed: %s - replacing with empty string', shortLink, str(e))
-			return '' # if something was wrong with the match, just return an empty string
+			# log an error, and then do nothing, so that resolvedLink will be returned as the initial error message it was set to
+			logger.error('Problem with resolving link, regex found a match but replace function couldn\'t access it: %s - replacing link with an error message', str(e))
+
 		else :
-			resolvedLink = ''
+
 			if hasattr(tweet,'entities') and 'urls' in tweet.entities : # if we have any urls in the tweet
 				for ent in tweet.entities['urls'] : # loop through all the urls looking for our match
 					if shortLink == ent['url'] :
+						# try to find the actual url from the tweet object
 						try :
 							expandedURL = ent['expanded_url'] # get expanded url
 						except KeyError as e:
-							# if no 'expanded_url' for some reason, leave resolvedLink as an empty string and return that
-							logger.error('Could not resolve shortlink:%s, no expanded_url in tweet entities; replacing with an empty string - %s', shortLink, str(e))
-						else :
-							try :
-								# format the link in reddit markup using the display_url
-								resolvedLink = '[' + ent['display_url'] + '](' + expandedURL + ')'
-							except KeyError as e :
-								# if for some reason there's no display_url, just use the raw link
-								resolvedLink = expandedURL
+							# if no 'expanded_url' for some reason, we'll just set expandedURL = shortLink and try to resolve the link by following its redirects with an HTTP request
+							expandedURL = shortLink
+
+							logger.error('Could not resolve shortlink:%s, no expanded_url in tweet entities; trying to resolve it manually - %s', shortLink, str(e))
+							
+						# whether that worked or not, we still need to test it to see if it redirects elsewhere
+						# and if so, use the redirected url (because a bit.ly url, for example, would still get us stuck in reddit's spam filter)
+						try :
+							# follow any redirects and store that url
+							session = requests.Session()
+							resp = session.head(expandedURL, allow_redirects=True) # follow any redirects
+							expandedURL = resp.url # save the redirected url
+						except requests.exceptions.RequestException as e :
+							# there was a problem trying to find the url to see if it redirected anywhere, so log the error
+							# in the future, we may want to apply more sophisticated error handling here, with timeouts and so forth
+							# in the meantime, we'll just do nothing, which will result in expandedURL
+							# having either the value of the expanded url from the tweet object (ideally) or (worst case) the original t.co link if the expanded_url couldn't be found in the tweet object
+							logger.error('HTTP request failed when trying to see if %s redirects anywhere, so we\'ll just post the original link; error: %s',expandedURL,str(e))
+							
+						# regardless of whether everything got resolved appropriately, we set resolvedLink to expandedURL, with some formatting
+						# depending on which of the previous try blocks failed, expandedURL could at this point be
+						# anything from the original t.co link to an intermediate shortlink (e.g. bit.ly) to the fully resolved url
+						try :
+
+
+							# format the link in reddit markup using the display_url
+							resolvedLink = '[' + ent['display_url'] + '](' + expandedURL + ')'
+						except KeyError as e :
+							# if for some reason there's no display_url, just use the raw link
+							resolvedLink = expandedURL
+							logger.error('Could not find display_url when replacing link, so just posting raw link without formatting - error: %s', str(e))
 						break
 				else : # no break means we didn't find the url in entities
 					# this is expected to happen with all t.co links to the tweet itself that the twitter API appends to the end of the tweet text
-					# so we'll log it, and leave resolvedLink as an empty string
-					logger.debug('Could not find shortlink:%s in the tweet entities[\'urls\']; replacing it with an empty string', shortLink)
+					# so we'll log it, and replace resolvedLink with an empty string, because we don't want to display those links
+					resolvedLink = ''
+					logger.debug('Could not find shortlink:%s in the tweet entities[\'urls\']; this is probably a link to the tweet itself, so replacing it with an empty string', shortLink)
 			else :
-				logger.error('Trying to replace shortlink:%s but tweet entities[\'urls\'] did not exist; replacing it with an empty string', shortLink)
-			return resolvedLink
+				logger.error('Trying to replace shortlink:%s but tweet entities[\'urls\'] did not exist; replacing it with an error message', shortLink)
+		return resolvedLink
 	return replaceLink
-
-
+	
 if __name__ == "__main__":
     main()
