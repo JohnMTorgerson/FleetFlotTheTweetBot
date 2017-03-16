@@ -87,8 +87,12 @@ def alreadyDone(s) :
 	s.replace_more_comments(limit=None, threshold=0) # get unlimited list of top comments
 	for comment in s.comments : # loop through all the top-level comments
 		# if we wrote this top-level comment
-		if comment.author.name == botName :
-			return True
+		try:
+			if comment.author.name == botName :
+				return True
+		except AttributeError as e:
+			# a comment will have no author if it has been deleted, which will raise an attribution error
+			pass
 	return False
 
 # reply to the submission with the contents of the tweet
