@@ -15,12 +15,14 @@ def twitter() :
 	auth.set_access_token(loginTwitter.access_token, loginTwitter.access_secret)
 	t = tweepy.API(auth)
 	return t
-	
+
 # Imgur
 from imgurpython import ImgurClient
 import loginImgur
 def imgur() :
 	i = ImgurClient(loginImgur.app_id, loginImgur.app_secret)
 	return i
-	
-	
+
+# Streamable (in this case, we just need to get the username and password,
+#            which will be passed as a BasicAuth request at the time of upload)
+import loginStreamable

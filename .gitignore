@@ -5,6 +5,7 @@ SandboxVersion/
 loginReddit.py
 loginTwitter.py
 loginImgur.py
+loginStreamable.py
 
 # logs directory used during testing;
 logs/
@@ -15,3 +16,4 @@ paths.py
 # garbage
 __pycache__/
 mainTESTING.py
+.DS_Store
