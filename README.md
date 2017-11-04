@@ -15,4 +15,4 @@ A simple Twitter bot for /r/minnesotavikings
 * Possibly reply to twitter links in the text of a self post?
 * Possibly reply to twitter links in comments?
 
-Written in Python 3 using the following modules: praw(3), tweepy, imgurpython, and gfycat
+Written in Python 3 using the following modules: PRAW (5.2.0), Tweepy, Imgurpython, and Gfycat

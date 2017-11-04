@@ -2,9 +2,11 @@
 import praw
 import loginReddit
 def reddit():
-    r = praw.Reddit(loginReddit.app_ua)
-    r.set_oauth_app_info(loginReddit.app_id, loginReddit.app_secret, loginReddit.app_uri)
-    r.refresh_access_information(loginReddit.app_refresh)
+    r = praw.Reddit(client_id=loginReddit.app_id,
+                     client_secret=loginReddit.app_secret,
+                     password=loginReddit.password,
+                     user_agent=loginReddit.app_ua,
+                     username=loginReddit.username)
     return r
 
 # Twitter

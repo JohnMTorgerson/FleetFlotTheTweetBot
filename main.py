@@ -1,6 +1,7 @@
 # Reply to any submission in 'subName' that's a Twitter link
 
 import praw # reddit api wrapper
+import prawcore # some praw exceptions inherit from here
 import tweepy # twitter api wrapper
 import imgurpython # imgur api wrapper
 from imgurpython.helpers.error import ImgurClientError # imgurpython errors
@@ -20,7 +21,6 @@ import logging.handlers
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = 'minnesotavikings' # the subreddit we're operating on
-domains = ['twitter.com','mobile.twitter.com'] # twitter domains to check submissions against
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -28,23 +28,34 @@ warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 # configure logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-# timed rotating handler to log to file at INFO level, rotate every 1 days
-main_handler = logging.handlers.TimedRotatingFileHandler(paths.logs + 'main_log.log',when="d",interval=1)
+
+# timed rotating handler to log to file at INFO level, rotate every 50 KB
+main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
 main_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
-# handler to log to a different file at ERROR level
-error_handler = logging.FileHandler(paths.logs + 'error_log.log')
+
+# handler to log to a different file at ERROR level, rotate every 50 KB
+error_handler = logging.handlers.RotatingFileHandler(paths.logs + 'error_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
 error_handler.setLevel(logging.ERROR)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 error_handler.setFormatter(formatter)
 logger.addHandler(error_handler)
 
+# separate handler to log the ID of each submission we comment on, rotate every 50 KB
+comment_logger = logging.getLogger('comments')
+comment_logger.setLevel(logging.INFO)
+comment_handler = logging.handlers.RotatingFileHandler(paths.logs + 'comment_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+comment_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(message)s')
+comment_handler.setFormatter(formatter)
+comment_logger.addHandler(comment_handler)
+
 # login to reddit
 try:
 	r = login.reddit() # login to our account
-except praw.errors.PRAWException as e:
+except praw.exceptions.PRAWException as e:
 	logger.critical('EXITING! Couldn\'t log in to reddit: %s %s',e.message,e.url)
 	raise SystemExit('Quitting - could not log in to Reddit!') # if we can't deal with reddit, just stop altogether, and let it try again next time
 
@@ -71,33 +82,49 @@ def main() :
 	# find any submissions in this subreddit that are links to twitter.com
 	# and reply to them
 	try:
-		subreddit = r.get_subreddit(subName,fetch=True) # fetch=True is necessary to test if we've really got a real subreddit
-	except praw.errors.PRAWException as e:
-		logger.critical('EXITING! Could not get subreddit %s',e.message)
-		raise SystemExit('Quitting - could not get subreddit') # if we can't deal with reddit, just stop altogether, and let it try again next time
-	else:
-		for s in subreddit.get_new(limit=50) : # check the newest 50 submissions
+		subreddit = r.subreddit(subName)
+		for s in subreddit.new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
-			if s.domain in domains and not alreadyDone(s) :
+			pattern = re.compile("^http(s)?:\/\/(www.|mobile.)?twitter.com")
+
+			# if the domain is twitter.com and we haven't already commented, proceed
+			if pattern.match(s.url) is not None and not alreadyDone(s) :
 				addComment(s)
+	except prawcore.exceptions.OAuthException as e:
+		logger.critical('EXITING! Could not log in to reddit: %s',str(e))
+		raise SystemExit('Quitting - could not log in to reddit') # if we can't deal with reddit, just stop altogether, and let it try again next time
+	except prawcore.PrawcoreException as e:
+		logger.critical('EXITING! Could not get subreddit/submissions: %s',str(e))
+		raise SystemExit('Quitting - could not get subreddit/submissions') # if we can't deal with reddit, just stop altogether, and let it try again next time
 
 # return True if we've already replied to this submission
 def alreadyDone(s) :
+	# First we'll check if we've commented in this thread already
 	try:
-		s.replace_more_comments(limit=None, threshold=0) # get unlimited list of top comments
+		s.comments.replace_more(limit=0) # get unlimited list of comments
+		comments = s.comments.list()
 	except AttributeError as e:
 		logger.error("ERROR: could not find comments in post (thread possibly too old?) - %s", str(e)) # found this bug when testing on very old threads
 		return True # skip this post and move on to the next one
 
-	for comment in s.comments : # loop through all the top-level comments
+	for comment in comments : # loop through all the top-level comments
 		# if we wrote this top-level comment
 		try:
 			if comment.author.name == botName :
 				return True
 		except AttributeError as e:
+			pprint('attribute error: ' + str(e))
 			# a comment will have no author if it has been deleted, which will raise an attribute error
 			pass
+
+	# We'll also check our comment log file to be extra sure (sometimes reddit posts are delayed,
+	# so we want to do this to avoid a double post; one time the bot posted like 13 times in a row before I added this check)
+	with open(paths.logs + 'comment_log.log') as log:
+		for line in log:
+			if line == s.id + '\n' :
+				return True
+
 	return False
 
 # reply to the submission with the contents of the tweet
@@ -155,13 +182,14 @@ def addComment(s) :
 			comment += " ^^| ^^Skål!"
 
 			try:
-				s.add_comment(comment) # post comment to reddit
-			except praw.errors.PRAWException as e:
+				s.reply(comment) # post comment to reddit
+			except praw.exceptions.PRAWException as e:
 				logger.error('%s - Could not comment: %s',s.id,e.message)
 			except AttributeError as e:
 				logger.error('%s - Could not comment. I have no idea why: %s',s.id,str(e), exc_info=True)
 			else:
 				logger.info("Successfully added comment on %s!",s.id)
+				comment_logger.info(s.id) # log the ID of this submission to check against next time
 
 # get the contents of the tweet
 # if we can't find the tweet, raise an exception
