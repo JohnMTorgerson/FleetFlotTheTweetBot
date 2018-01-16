@@ -176,7 +176,7 @@ def addComment(s) :
 
 			# Footer
 			comment += lineSep + "\n\n"
-			comment += "^^I ^^am ^^a ^^bot ^^powered ^^exclusively ^^by ^^okra ^^and ^^Fred ^^Smoot ^^sayings"
+			comment += "^^I ^^am ^^a ^^bot ^^powered ^^by ^^excess ^^Keenum ^^testicular ^^volume"
 			comment += " ^^| [^^[message ^^me]](https://www.reddit.com/message/compose?to=FleetFlotTheTweetBot)"
 			comment += " ^^| [^^[source ^^code]](https://github.com/JohnMTorgerson/FleetFlotTheTweetBot)"
 			comment += " ^^| ^^Skål!"
