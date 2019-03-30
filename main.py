@@ -168,7 +168,7 @@ def addComment(s) :
 						for key in media :
 							string += "[[" + key + "]](" + media[key] + ") "
 						if string == "" : # i.e. if the dict was empty
-							string = "error rehosting video. Sorry!" # we should never get here, because an exception should have been raised earlier
+							string = "error rehosting video. Sorry!"
 						string = "Video: " + string
 					else : # otherwise, we assume it's a string, a single url
 						string = media
@@ -267,11 +267,13 @@ def getTweetMedia(tweet) :
 						# rehost the video on Streamable and append urls to tweetMedia
 						try:
 							vids = getStreamableURLs(url)
-						except requests.exceptions.RequestException as e:
-							e.custom = 'Could not upload to Streamable. RequestException: ' + str(e)
-							raise
-						else:
-							tweetMedia.append(vids)
+						except Exception as e:
+							logger.error('%s - Could not upload to Streamable, commenting anyway: %s',s.id,str(e))
+							# send back an error message to be displayed in the comment
+							vids = '*Sorry, there was an error trying to reupload a video in this tweet :(*'
+							# we don't want to raise this exception, because we want to post the tweet
+							# even if we couldn't get the video uploaded
+						tweetMedia.append(vids)
 
 					else : # we didn't find anything
 						logger.error("VIDEO found, but didn't recognize content_type: %s",ent['url'])
@@ -314,8 +316,12 @@ def getImgurURL(url) :
 
 # given a url to a twitter video, upload to streamable and return a dict with streamable urls to the video (2 videos, for desktop and mobile)
 def getStreamableURLs(url) :
-	r = requests.get('https://api.streamable.com/import?url=' + url,auth=requests.auth.HTTPBasicAuth(login.loginStreamable.username,login.loginStreamable.password))
-	shortcode = r.json()['shortcode'] # get shortcode from streamable for uploaded video, which we'll then check on to see if it got uploaded
+	try:
+		r = requests.get('https://api.streamable.com/import?url=' + url,auth=requests.auth.HTTPBasicAuth(login.loginStreamable.username,login.loginStreamable.password))
+		shortcode = r.json()['shortcode'] # get shortcode from streamable for uploaded video, which we'll then check on to see if it got uploaded
+	except Exception as e:
+		e.custom = 'Streamable account may have been suspended; response was: ' + str(r)
+		raise
 
 	# wait until status is '2' or give up after 13 tries
 	urls = {} # we'll return this
