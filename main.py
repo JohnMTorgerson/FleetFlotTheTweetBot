@@ -268,9 +268,9 @@ def getTweetMedia(tweet) :
 						try:
 							vids = getStreamableURLs(url)
 						except Exception as e:
-							logger.error('%s - Could not upload to Streamable, commenting anyway: %s',s.id,str(e))
+							logger.error('Could not upload to Streamable, commenting anyway: %s',str(e))
 							# send back an error message to be displayed in the comment
-							vids = '*Sorry, there was an error trying to reupload a video in this tweet :(*'
+							vids = '*Sorry, there was an error trying to rehost a video in this tweet :(*'
 							# we don't want to raise this exception, because we want to post the tweet
 							# even if we couldn't get the video uploaded
 						tweetMedia.append(vids)
