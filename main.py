@@ -21,6 +21,7 @@ import logging.handlers
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = 'minnesotavikings' # the subreddit we're operating on
+#subName = 'FleetFlotTheTweetBot' # testing subreddit
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -32,6 +33,7 @@ logger.setLevel(logging.INFO)
 # timed rotating handler to log to file at INFO level, rotate every 50 KB
 main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
 main_handler.setLevel(logging.INFO)
+#main_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
@@ -359,6 +361,10 @@ def redditEscape(string) :
 
 	# delete leading spaces/tabs (so as not to trigger reddit's 'code' formatting)
 	string = re.sub(r"^[ \t]+","",string,0,re.MULTILINE)
+
+	# fix numbered list formatting by adding an escape like so: '5\.'
+	# otherwise reddit will always change the numbers to start at 1
+	string = re.sub(r"(?<=^\d)\.","\\.",string,0,re.MULTILINE)
 
 	# double space, because reddit needs two newlines to actually display a line break
 	# (the regex actually only adds a newline at the end of a line if there's another line after it with characters in it)
