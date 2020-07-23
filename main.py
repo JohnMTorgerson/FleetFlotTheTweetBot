@@ -364,7 +364,7 @@ def redditEscape(string) :
 
 	# fix numbered list formatting by adding an escape like so: '5\.'
 	# otherwise reddit will always change the numbers to start at 1
-	string = re.sub(r"(?<=^\d)\.","\\.",string,0,re.MULTILINE)
+	string = re.sub(r"(?:(?<=^\d)|(?<=^\d{2})|(?<=^\d{3}))\.","\\.",string,0,re.MULTILINE)
 
 	# double space, because reddit needs two newlines to actually display a line break
 	# (the regex actually only adds a newline at the end of a line if there's another line after it with characters in it)
