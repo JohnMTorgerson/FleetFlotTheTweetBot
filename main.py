@@ -333,9 +333,9 @@ def getStreamableURLs(url) :
 		files = response.json()['files']
 		if status == 2 : # success, but we still have to check to see if we have any url's yet
 			if 'mp4' in files and files['mp4'].get('url','') != '' : # we have a desktop url
-				urls['desktop'] = 'https:' + files['mp4']['url']
+				urls['desktop'] = files['mp4']['url']
 			if 'mp4-mobile' in files and files['mp4-mobile'].get('url','') != '' : # we have a mobile url
-				urls['mobile'] = 'https:' + files['mp4-mobile']['url']
+				urls['mobile'] = files['mp4-mobile']['url']
 
 			# if we have both a desktop and a mobile url, break out of the loop
 			# (if we have neither or just 1 of the 2, we'll keep trying)
