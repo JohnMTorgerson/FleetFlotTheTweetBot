@@ -30,10 +30,16 @@ warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# timed rotating handler to log to file at DEBUG level, rotate every 50 KB
+debug_handler = logging.handlers.RotatingFileHandler(paths.logs + 'debug_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+debug_handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
+debug_handler.setFormatter(formatter)
+logger.addHandler(debug_handler)
+
 # timed rotating handler to log to file at INFO level, rotate every 50 KB
 main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
 main_handler.setLevel(logging.INFO)
-#main_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
@@ -88,11 +94,27 @@ def main() :
 		for s in subreddit.new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
-			pattern = re.compile("^http(s)?:\/\/(www.|mobile.)?twitter.com")
+			pattern = re.compile("^https?:\/\/(www\.|mobile\.)?twitter\.com")
 
 			# if the domain is twitter.com and we haven't already commented, proceed
 			if pattern.match(s.url) is not None and not alreadyDone(s) :
-				addComment(s)
+				# create reply
+				reply = composeReply(s.url,s.id)
+
+				# post comment as a top-level reply to the submission
+				# (if there was a serious error in composeReply
+				# it will just return None, and we won't reply)
+				if reply is not None :
+					try:
+						s.reply(reply) # post comment to reddit
+					except praw.exceptions.PRAWException as e:
+						logger.error('%s - Could not comment: %s',s.id,e.message)
+					except AttributeError as e:
+						logger.error('%s - Could not comment. I have no idea why: %s',s.id,str(e), exc_info=True)
+					else:
+						logger.info("Successfully added comment on %s!",s.id)
+						comment_logger.info(s.id) # log the ID of this submission to check against next time
+
 	except prawcore.exceptions.OAuthException as e:
 		logger.critical('EXITING! Could not log in to reddit: %s',str(e))
 		raise SystemExit('Quitting - could not log in to reddit') # if we can't deal with reddit, just stop altogether, and let it try again next time
@@ -104,19 +126,19 @@ def main() :
 def alreadyDone(s) :
 	# First we'll check if we've commented in this thread already
 	try:
-		s.comments.replace_more(limit=0) # get unlimited list of comments
-		comments = s.comments.list()
+		s.comments.replace_more(limit=None) # get unlimited list of comments
 	except AttributeError as e:
 		logger.error("ERROR: could not find comments in post (thread possibly too old?) - %s", str(e)) # found this bug when testing on very old threads
 		return True # skip this post and move on to the next one
 
-	for comment in comments : # loop through all the top-level comments
+	for comment in s.comments : # loop through all the top-level comments
 		# if we wrote this top-level comment
 		try:
 			if comment.author.name == botName :
+				logger.debug('We posted a top-level comment on this thread already: %s', comment.id)
 				return True
 		except AttributeError as e:
-			pprint('attribute error: ' + str(e))
+			# logger.debug('attribute error: ' + str(e))
 			# a comment will have no author if it has been deleted, which will raise an attribute error
 			pass
 
@@ -127,27 +149,44 @@ def alreadyDone(s) :
 			if line == s.id + '\n' :
 				return True
 
+	logger.debug('We have not commented on this post yet')
 	return False
 
-# reply to the submission with the contents of the tweet
-def addComment(s) :
-	logger.info("######## Found new tweet ######## REDDIT:%s TWITTER:%s", s.id, s.url ) # log the submission id and twitter URL
+# compose comment from the contents of the tweet
+# url is the url of the tweet
+# sub_id is the id of the submission
+# com_id is the id of the comment; if the link is from the submission itself
+#		 rather than a comment within the submission, this should be left as None
+def composeReply(url, sub_id, com_id = None) :
+	# if com_ID isn't empty, we're replying to a comment
+	if com_id is not None :
+		where = "COMMENT"
+		id = sub_id + "_" + com_id
+	# otherwise, we're replying to a post (submission)
+	else :
+		where = "POST"
+		id = sub_id
+
+	logger.info("######## Found new tweet in %s ######## REDDIT:%s TWITTER:%s", where, id, url ) # log the submission id and twitter URL
+
+	comment = None
 
 	try:
-		tweet = getTweet(s.url) # return tweet object
+		tweet = getTweet(url) # return tweet object
 	except AttributeError as e: # we couldn't find the tweet id from the url
-		logger.error("%s - %s",s.id,e.custom) # print custom error message
+		logger.error("%s - %s",id,e.custom) # print custom error message
 	except tweepy.error.TweepError as e: # we couldn't find the tweet from the id
-		logger.error("%s - %s",s.id,e.custom) # print custom error message
+		logger.error("%s - %s",id,e.custom) # print custom error message
 	else:
 		try:
+			#raise Exception('Don\'t even try to get media while testing')
 			tweetMedia = getTweetMedia(tweet) # find any media in the tweet and return as list
 		except Exception as e:
-			logger.error("%s - Could not post tweet due to exception when finding/rehosting media - message:%s",s.id,str(e), exc_info=True)
+			logger.error("%s - Could not post tweet due to exception when finding/rehosting media - message:%s",id,str(e), exc_info=True)
 			if hasattr(e,'custom'):
-				logger.error("%s - %s",s.id,e.custom) # print custom error message
+				logger.error("%s - %s",id,e.custom) # print custom error message
 		else:
-			logger.debug('title: %s',s.title)
+			#logger.debug('title: %s',s.title)
 			logger.debug('text: %s',tweet.full_text)
 
 			# --- FORMAT COMMENT --- #
@@ -157,7 +196,7 @@ def addComment(s) :
 			comment = "**[@" + tweet.user.screen_name + "](https://www.twitter.com/" + tweet.user.screen_name + ")** (" + tweet.user.name + "):\n\n"
 
 			# Text
-			tweetText = re.sub(r"\bhttps?:\/\/t.co\/\w+\b",resolveLink(tweet), tweet.full_text, 0) # replace any t.co links in the tweet text with the resolved link; not only does this allow people to use them even if twitter is blocked, t.co links also probably cause reddit comments to be blocked as spam
+			tweetText = re.sub(r"\bhttps?:\/\/t\.co\/\w+\b",resolveLink(tweet), tweet.full_text, 0) # replace any t.co links in the tweet text with the resolved link; not only does this allow people to use them even if twitter is blocked, t.co links also probably cause reddit comments to be blocked as spam
 			comment += re.sub(r"^","> ",redditEscape(tweetText), 0, re.MULTILINE) + "\n\n" # escape reddit formatting and add "> " quote syntax to the beginning of each line
 
 			logger.debug('text after link replacement: ' + tweetText)
@@ -182,16 +221,8 @@ def addComment(s) :
 			comment += " ^^| [^^[message ^^me]](https://www.reddit.com/message/compose?to=FleetFlotTheTweetBot)"
 			comment += " ^^| [^^[source ^^code]](https://github.com/JohnMTorgerson/FleetFlotTheTweetBot)"
 			comment += " ^^| ^^Skål!"
+	return comment
 
-			try:
-				s.reply(comment) # post comment to reddit
-			except praw.exceptions.PRAWException as e:
-				logger.error('%s - Could not comment: %s',s.id,e.message)
-			except AttributeError as e:
-				logger.error('%s - Could not comment. I have no idea why: %s',s.id,str(e), exc_info=True)
-			else:
-				logger.info("Successfully added comment on %s!",s.id)
-				comment_logger.info(s.id) # log the ID of this submission to check against next time
 
 # get the contents of the tweet
 # if we can't find the tweet, raise an exception
