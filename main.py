@@ -10,7 +10,10 @@ from gfycat.error import GfycatClientError # gfycat api errors
 import login # our custom login object for all the api's we need
 import paths # links to custom paths (e.g. for the log files)
 import re
+import regex # one of the regex patterns we need to use requires a possessive quantifier, which the 're' library doesn't support. This library does.
 import time
+import multiprocessing # only using this to time-out the big url regex in case of catastrophic backtracking
+import queue as queueError # for queue.empty exception
 import requests
 import json # to display data for debugging
 from pprint import pprint
@@ -88,18 +91,23 @@ except ImgurClientError as e:
 
 def main() :
 	# find any submissions in this subreddit that are links to twitter.com
-	# and reply to them
+	# and reply to them; then loop through all comments in that submission
+	# and reply to any twitter links found therein
 	try:
 		subreddit = r.subreddit(subName)
+		# loop through submissions
 		for s in subreddit.new(limit=50) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			pattern = re.compile("^https?:\/\/(www\.|mobile\.)?twitter\.com")
 
+			########-------- Reply to Submission --------########
+			logger.debug('Checking submission itself for Twitter link...')
 			# if the domain is twitter.com and we haven't already commented, proceed
 			if pattern.match(s.url) is not None and not alreadyDone(s) :
 				# create reply
 				reply = composeReply(s.url,s.id)
+				#reply = None
 
 				# post comment as a top-level reply to the submission
 				# (if there was a serious error in composeReply
@@ -114,6 +122,77 @@ def main() :
 					else:
 						logger.info("Successfully added comment on %s!",s.id)
 						comment_logger.info(s.id) # log the ID of this submission to check against next time
+
+			########-------- Reply to Comments --------########
+			logger.debug('Checking this submission\'s comments for Twitter links...')
+			s.comments.replace_more(limit=None)
+			# loop through all comments in this submission
+			for comment in s.comments.list() :
+				logger.info('#### Comment id: %s (submission %s) ####',comment.id,comment.submission.id)# + '\n' + comment.body + '\n------------')
+				# regex url to parse any url out of the given text;
+				# the following regex pattern was taken from https://mathiasbynens.be/demo/url-regex (@gruber v2)
+				# and modified to work in python; also added a check to not match * at the end
+				# specifically in case a url is put in reddit italics/bold markup.
+				# I uh... I hope this doesn't break any legit urls...
+				# also added another '+' after the second '+' quantifier to make it possessive
+				regex_url = r"(?i)\b((?:[a-z][\w-]+:(?:\/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]++[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\"\*.,<>?«»“”‘’]))" # find any url
+				regex_tweet = r"https?:\/\/(?:www\.|mobile\.)?twitter\.com\/\w{1,15}\/status\/\d+"
+
+			    # Find urls in text; we use a separate process for this
+				# simply so that we can time it out after a while;
+				# since the regex is so unwieldy and the text unpredictable,
+				# we run the risk of catastrophic backtracking;
+				# I've done my best to stop that from happening, but
+				queue = multiprocessing.Queue()
+				p = multiprocessing.Process(target=findURLs, args=(regex_url, comment.body, queue))
+				p.start()
+				p.join(2) # Wait for 2 seconds or until process finishes
+				# If thread is still active
+				if p.is_alive():
+				    logger.error("    Regex to find url on %s in %s was taking too long; skipping this comment",comment.id,comment.submission.id)
+				    # Terminate
+				    p.terminate()
+				    p.join()
+				try :
+				    urls = queue.get_nowait()
+				except queueError.Empty as e :
+				    urls = []
+
+				logger.debug('    Found the following URLs in this comment: %s', str(urls))
+				# loop through any urls and see if any resolve into twitter status (tweet) links
+				tweet_links = []
+				for url in urls :
+					url = url[0] # the list of urls is actually a list of tuples, and we just want the first string within the tuple, which is the url itself
+					try :
+						# follow any redirects and store that url
+						session = requests.Session()
+						resp = session.head(url, allow_redirects=True) # follow any redirects
+						resolved_url = resp.url # save the redirected url
+					except requests.exceptions.RequestException as e :
+						logger.debug("    Using %s as found, problem with redirect detection: %s", url, str(e))
+						resolved_url = url
+					try :
+						# test to see if the resolved url is a twitter link
+						tweet_links.append(re.match(regex_tweet,resolved_url).group(0))
+					except AttributeError as e :
+						logger.debug('    no match to add to tweet_links in %s', resolved_url)
+					except TypeError as e :
+						logger.debug('    error appending tweet link: %s', str(e))
+						#tweet_links.append(re.match(regex_tweet,url).group(0))
+					#except :
+				if tweet_links : # if tweet_links is not empty
+					logger.info('    Found tweet links! (not commenting yet though) %s', str(tweet_links))
+
+				# now loop through any twitter links we found in this comment
+				# and post replies to them
+				for tweet_link in tweet_links :
+					# will have to modify alreadyDone() to be able to handle comments
+					# particularly, it'll have to somehow handle the possibility of multiple replies
+					# in the case that there are multiple links to reply to
+					# if not alreadyDone(comment) :
+					# 	composeReply(tweet_link, s.id, comment.id)
+					pass
+
 
 	except prawcore.exceptions.OAuthException as e:
 		logger.critical('EXITING! Could not log in to reddit: %s',str(e))
@@ -464,6 +543,12 @@ def resolveLink(tweet) :
 				logger.error('Trying to replace shortlink:%s but tweet entities[\'urls\'] did not exist; replacing it with an error message', shortLink)
 		return resolvedLink
 	return replaceLink
+
+# find urls in body of comment text; this function is called as a separate process
+# in order to cut it off after a couple seconds in case of a runaway regex deal
+def findURLs(pattern, text, return_queue) :
+	return_queue.put(regex.findall(pattern,text)) # use the regex library instead of the re library because the regex_url pattern uses a possessive quantifier
+
 
 if __name__ == "__main__":
     main()
