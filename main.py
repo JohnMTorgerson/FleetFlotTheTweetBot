@@ -33,31 +33,31 @@ warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# timed rotating handler to log to file at DEBUG level, rotate every 50 KB
-debug_handler = logging.handlers.RotatingFileHandler(paths.logs + 'debug_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+# timed rotating handler to log to file at DEBUG level, rotate every 100 KB
+debug_handler = logging.handlers.RotatingFileHandler(paths.logs + 'debug_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
 debug_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 debug_handler.setFormatter(formatter)
 logger.addHandler(debug_handler)
 
-# timed rotating handler to log to file at INFO level, rotate every 50 KB
-main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+# timed rotating handler to log to file at INFO level, rotate every 100 KB
+main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
 main_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
 
-# handler to log to a different file at ERROR level, rotate every 50 KB
-error_handler = logging.handlers.RotatingFileHandler(paths.logs + 'error_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+# handler to log to a different file at ERROR level, rotate every 100 KB
+error_handler = logging.handlers.RotatingFileHandler(paths.logs + 'error_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
 error_handler.setLevel(logging.ERROR)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 error_handler.setFormatter(formatter)
 logger.addHandler(error_handler)
 
-# separate handler to log the ID of each submission we comment on, rotate every 50 KB
+# separate handler to log the ID of each submission we comment on, rotate every 100 KB
 comment_logger = logging.getLogger('comments')
 comment_logger.setLevel(logging.INFO)
-comment_handler = logging.handlers.RotatingFileHandler(paths.logs + 'comment_log.log', mode='a', maxBytes=50000, backupCount=100, encoding=None, delay=False)
+comment_handler = logging.handlers.RotatingFileHandler(paths.logs + 'comment_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
 comment_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(message)s')
 comment_handler.setFormatter(formatter)
@@ -128,7 +128,7 @@ def main() :
 			s.comments.replace_more(limit=None)
 			# loop through all comments in this submission
 			for comment in s.comments.list() :
-				logger.info('#### Comment id: %s (submission %s) ####',comment.id,comment.submission.id)# + '\n' + comment.body + '\n------------')
+				#logger.info('#### Comment id: %s (submission %s) ####',comment.id,comment.submission.id)# + '\n' + comment.body + '\n------------')
 				# regex url to parse any url out of the given text;
 				# the following regex pattern was taken from https://mathiasbynens.be/demo/url-regex (@gruber v2)
 				# and modified to work in python; also added a check to not match * at the end
@@ -181,6 +181,7 @@ def main() :
 						#tweet_links.append(re.match(regex_tweet,url).group(0))
 					#except :
 				if tweet_links : # if tweet_links is not empty
+					logger.info('#### Comment ID: %s (Submission %s) ####',comment.id,comment.submission.id)
 					logger.info('    Found tweet links! (not commenting yet though) %s', str(tweet_links))
 
 				# now loop through any twitter links we found in this comment
