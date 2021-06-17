@@ -6,6 +6,8 @@ loginReddit.py
 loginTwitter.py
 loginImgur.py
 loginStreamable.py
+loginGfycat.py
+creds.json
 
 # logs directory used during testing;
 logs/
@@ -17,3 +19,4 @@ paths.py
 __pycache__/
 mainTESTING.py
 .DS_Store
+temp

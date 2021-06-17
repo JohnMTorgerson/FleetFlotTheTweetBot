@@ -5,8 +5,10 @@ import prawcore # some praw exceptions inherit from here
 import tweepy # twitter api wrapper
 import imgurpython # imgur api wrapper
 from imgurpython.helpers.error import ImgurClientError # imgurpython errors
-from gfycat.client import GfycatClient # gfycat api wrapper
-from gfycat.error import GfycatClientError # gfycat api errors
+# from gfycat.client import GfycatClient # gfycat api wrapper
+# from gfycat.error import GfycatClientError # gfycat api errors
+from gfypy import Gfypy
+from gfypy import GfypyException
 import login # our custom login object for all the api's we need
 import paths # links to custom paths (e.g. for the log files)
 import re
@@ -23,8 +25,8 @@ import logging.handlers
 
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
-subName = 'minnesotavikings' # the subreddit we're operating on
-#subName = 'FleetFlotTheTweetBot' # testing subreddit
+# subName = 'minnesotavikings' # the subreddit we're operating on
+subName = 'FleetFlotTheTweetBot' # testing subreddit
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -84,7 +86,12 @@ except ImgurClientError as e:
 	logger.critical('EXITING! Couldn\'t log in to Imgur: %s',str(e))
 	raise SystemExit('Quitting - could not log in to Imgur!') # if we can't deal with Imgur, just stop altogether, and let it try again next time
 
-
+# login to gfycat
+try:
+	g = login.gfycat() # login and get the gfycat object
+except Exception as e:
+	logger.critical('EXITING! Couldn\'t log in to Gfycat: %s',str(e))
+	raise SystemExit('Quitting - could not log in to Gfycat!') # if we can't deal with Gfycat, just stop altogether, and let it try again next time
 
 
 
@@ -96,7 +103,7 @@ def main() :
 	try:
 		subreddit = r.subreddit(subName)
 		# loop through submissions
-		for s in subreddit.new(limit=50) : # check the newest 50 submissions
+		for s in subreddit.new(limit=5) : # check the newest 50 submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			pattern = re.compile("^https?:\/\/(www\.|mobile\.)?twitter\.com")
@@ -115,8 +122,12 @@ def main() :
 				if reply is not None :
 					try:
 						s.reply(reply) # post comment to reddit
+					except praw.exceptions.RedditAPIException as e:
+						# for subexception in e.items:
+						# 	print(subexception.error_type)
+						logger.error('%s - Could not comment: %s',s.id,e.items)
 					except praw.exceptions.PRAWException as e:
-						logger.error('%s - Could not comment: %s',s.id,e.message)
+						logger.error('%s - Could not comment: %s',s.id,str(e))
 					except AttributeError as e:
 						logger.error('%s - Could not comment. I have no idea why: %s',s.id,str(e), exc_info=True)
 					else:
@@ -348,19 +359,21 @@ def getTweetMedia(tweet) :
 
 							# rehost the gif on gfycat and add the new url
 							try:
-								gfy = GfycatClient()
-								response = gfy.upload_from_url(url)
-								rehostURL = "http://www.gfycat.com/" + response['gfyname']
-							except GfycatClientError as e:
+								filepath = download(url)
+								response = g.upload_from_file(filepath)
+								gfy_url = response.content_urls.mp4.url
+							except GfypyException as e:
 								# set custom error message and raise exception
-								e.custom = 'Could not upload to gfycat. GfyCatClientError: ' + str(e)
+								e.custom = 'Could not upload to gfycat. GfypyException: ' + str(e)
 								raise
 							except KeyError as e: # KeyError will be raised if we could connect to gfycat, but couldn't upload (e.g. the url we tried to upload was bad)
 								# set custom error message and raise exception
 								e.custom = 'Could not upload to gfycat. Probably a bad upload url. KeyError: ' + str(e) + ' doesn\'t exist in response. JSON response was: ' + str(response)
 								raise
+							except Exception as e:
+								raise
 							else:
-								tweetMedia.append(rehostURL)
+								tweetMedia.append(gfy_url)
 							break
 					else : # no-break: we didn't find anything
 						logger.error("GIF, didn't recognize content_type: %s",ent['url'])
@@ -436,10 +449,10 @@ def getStreamableURLs(url) :
 		e.custom = 'Streamable account may have been suspended; response was: ' + str(r)
 		raise
 
-	# wait until status is '2' or give up after 13 tries
+	# wait until status is '2' or give up after 20 tries
 	urls = {} # we'll return this
-	tries = 12
-	while tries >=0 :
+	tries = 20
+	while tries > 0 :
 		response = requests.get('https://api.streamable.com/videos/' + shortcode)
 		response.json()
 		status = response.json()['status']
@@ -550,6 +563,18 @@ def resolveLink(tweet) :
 def findURLs(pattern, text, return_queue) :
 	return_queue.put(regex.findall(pattern,text)) # use the regex library instead of the re library because the regex_url pattern uses a possessive quantifier
 
+def download(url) :
+	try :
+		req = requests.get(url)
+		filename = 'temp/' + url.split('/')[-1]
+		with open(filename,'wb') as file:
+		    file.write(req.content)
+	except Exception as e:
+		e.custom = 'Unable to download file ' + url
+		raise
+	else :
+		logger.debug('Successfully downloaded' + url + ' as ' + filename)
+		return filename
 
 if __name__ == "__main__":
     main()

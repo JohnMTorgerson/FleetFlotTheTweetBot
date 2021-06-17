@@ -28,3 +28,11 @@ def imgur() :
 # Streamable (in this case, we just need to get the username and password,
 #            which will be passed as a BasicAuth request at the time of upload)
 import loginStreamable
+
+# Gfycat
+# from gfycat.client import GfycatClient # gfycat api wrapper
+from gfypy import Gfypy
+import loginGfycat
+def gfycat() :
+    g = Gfypy(loginGfycat.client_id, loginGfycat.client_secret, './creds.json')
+    return g
