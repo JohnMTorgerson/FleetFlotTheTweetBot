@@ -29,7 +29,7 @@ load_dotenv()
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = os.environ['SUB_NAME'] # subreddit
-num_threads = os.environ['NUM_THREADS'] # the number of recent threads to check
+num_threads = int(os.environ['NUM_THREADS']) # the number of recent threads to check
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
