@@ -8,6 +8,7 @@ loginImgur.py
 loginStreamable.py
 loginGfycat.py
 creds.json
+.env
 
 # logs directory used during testing;
 logs/

@@ -22,11 +22,13 @@ from pprint import pprint
 import warnings
 import logging
 import logging.handlers
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
-# subName = 'minnesotavikings' # the subreddit we're operating on
-subName = 'FleetFlotTheTweetBot' # testing subreddit
+subName = os.environ['SUB_NAME'] # subreddit
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
