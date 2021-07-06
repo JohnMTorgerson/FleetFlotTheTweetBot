@@ -29,6 +29,7 @@ load_dotenv()
 # set some global variables
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = os.environ['SUB_NAME'] # subreddit
+num_threads = os.environ['NUM_THREADS'] # the number of recent threads to check
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
@@ -105,7 +106,7 @@ def main() :
 	try:
 		subreddit = r.subreddit(subName)
 		# loop through submissions
-		for s in subreddit.new(limit=5) : # check the newest 50 submissions
+		for s in subreddit.new(limit=num_threads) : # check the newest num_threads submissions
 			logger.debug('----------------------------------')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			pattern = re.compile("^https?:\/\/(www\.|mobile\.)?twitter\.com")
