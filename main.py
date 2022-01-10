@@ -311,7 +311,7 @@ def composeReply(url, sub_id, com_id = None) :
 
 			# Footer
 			comment += lineSep + "\n\n"
-			comment += "^I ^am ^a ^bot ^lubricated ^by ^Rick's ^slickness"
+			comment += "^I ^am ^a ^bot ^powered ^by ^fricks ^and ^I ^like ^that"
 			comment += " ^| [^(message&nbsp;me)](https://www.reddit.com/message/compose?to=FleetFlotTheTweetBot)"
 			comment += " ^| [^(source&nbsp;code)](https://github.com/JohnMTorgerson/FleetFlotTheTweetBot)"
 			comment += " ^| ^Skål!"
