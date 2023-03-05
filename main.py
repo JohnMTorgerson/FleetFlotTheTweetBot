@@ -23,6 +23,7 @@ import warnings
 import logging
 import logging.handlers
 import os
+import sys
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -30,39 +31,46 @@ load_dotenv()
 botName = 'FleetFlotTheTweetBot' # our reddit username
 subName = os.environ['SUB_NAME'] # subreddit
 num_threads = int(os.environ['NUM_THREADS']) # the number of recent threads to check
+url_logging_truncate = 50
 
 # turn off some warnings
 warnings.simplefilter("ignore", ResourceWarning) # ignore resource warnings
 
 # configure logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
-# timed rotating handler to log to file at DEBUG level, rotate every 100 KB
-debug_handler = logging.handlers.RotatingFileHandler(paths.logs + 'debug_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
+# timed rotating handler to log to file at DEBUG level, rotate every 1 MB
+debug_handler = logging.handlers.RotatingFileHandler(paths.logs + 'debug_log.log', mode='a', maxBytes=1000000, backupCount=1, encoding=None, delay=False)
 debug_handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 debug_handler.setFormatter(formatter)
 logger.addHandler(debug_handler)
 
-# timed rotating handler to log to file at INFO level, rotate every 100 KB
-main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
+# log debug messages to sdout
+debug_stream_handler = logging.StreamHandler(sys.stdout)
+debug_stream_handler.setLevel(logging.DEBUG)
+debug_stream_handler.setFormatter(formatter)
+logger.addHandler(debug_stream_handler)
+
+# timed rotating handler to log to file at INFO level, rotate every 1 MB
+main_handler = logging.handlers.RotatingFileHandler(paths.logs + 'main_log.log', mode='a', maxBytes=1000000, backupCount=10, encoding=None, delay=False)
 main_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 main_handler.setFormatter(formatter)
 logger.addHandler(main_handler)
 
-# handler to log to a different file at ERROR level, rotate every 100 KB
-error_handler = logging.handlers.RotatingFileHandler(paths.logs + 'error_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
+# handler to log to a different file at ERROR level, rotate every 1 MB
+error_handler = logging.handlers.RotatingFileHandler(paths.logs + 'error_log.log', mode='a', maxBytes=1000000, backupCount=1, encoding=None, delay=False)
 error_handler.setLevel(logging.ERROR)
 formatter = logging.Formatter('%(asctime)s %(levelname)s - %(message)s')
 error_handler.setFormatter(formatter)
 logger.addHandler(error_handler)
 
-# separate handler to log the ID of each submission we comment on, rotate every 100 KB
+# separate handler to log the ID of each submission we comment on, rotate every 1 MB
 comment_logger = logging.getLogger('comments')
 comment_logger.setLevel(logging.INFO)
-comment_handler = logging.handlers.RotatingFileHandler(paths.logs + 'comment_log.log', mode='a', maxBytes=100000, backupCount=50, encoding=None, delay=False)
+comment_handler = logging.handlers.RotatingFileHandler(paths.logs + 'comment_log.log', mode='a', maxBytes=1000000, backupCount=10, encoding=None, delay=False)
 comment_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(message)s')
 comment_handler.setFormatter(formatter)
@@ -71,6 +79,7 @@ comment_logger.addHandler(comment_handler)
 # login to reddit
 try:
 	r = login.reddit() # login to our account
+	logger.debug("Successfully logged into reddit")
 except praw.exceptions.PRAWException as e:
 	logger.critical('EXITING! Couldn\'t log in to reddit: %s %s',e.message,e.url)
 	raise SystemExit('Quitting - could not log in to Reddit!') # if we can't deal with reddit, just stop altogether, and let it try again next time
@@ -78,6 +87,7 @@ except praw.exceptions.PRAWException as e:
 # login to twitter
 try:
 	t = login.twitter() # login and get the twitter object
+	logger.debug("Successfully logged into Twitter")
 except tweepy.TweepError as e:
 	logger.critical('EXITING! Couldn\'t log in to Twitter: %s',str(e))
 	raise SystemExit('Quitting - could not log in to Twitter!') # if we can't deal with Twitter, just stop altogether, and let it try again next time
@@ -85,6 +95,7 @@ except tweepy.TweepError as e:
 # login to imgur
 try:
 	i = login.imgur() # login and get the imgur object
+	logger.debug("Successfully logged into Imgur")
 except ImgurClientError as e:
 	logger.critical('EXITING! Couldn\'t log in to Imgur: %s',str(e))
 	raise SystemExit('Quitting - could not log in to Imgur!') # if we can't deal with Imgur, just stop altogether, and let it try again next time
@@ -92,6 +103,7 @@ except ImgurClientError as e:
 # login to gfycat
 try:
 	g = login.gfycat() # login and get the gfycat object
+	logger.debug("Successfully logged into gfycat")
 except Exception as e:
 	logger.critical('EXITING! Couldn\'t log in to Gfycat: %s',str(e))
 	raise SystemExit('Quitting - could not log in to Gfycat!') # if we can't deal with Gfycat, just stop altogether, and let it try again next time
@@ -105,9 +117,10 @@ def main() :
 	# and reply to any twitter links found therein
 	try:
 		subreddit = r.subreddit(subName)
+		logger.debug(f"logging into r/{subName}...")
 		# loop through submissions
 		for s in subreddit.new(limit=num_threads) : # check the newest num_threads submissions
-			logger.debug('----------------------------------')
+			logger.debug('\n====================================================================================================')
 			logger.debug('SUBMISSION TITLE: %s',s.title)
 			pattern = re.compile("^https?:\/\/(www\.|mobile\.)?twitter\.com")
 
@@ -152,7 +165,7 @@ def main() :
 				regex_url = r"(?i)\b((?:[a-z][\w-]+:(?:\/{1,3}|[a-z0-9%])|www\d{0,3}[.]|[a-z0-9.\-]++[.][a-z]{2,4}\/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'\"\*.,<>?«»“”‘’]))" # find any url
 				regex_tweet = r"https?:\/\/(?:www\.|mobile\.)?twitter\.com\/\w{1,15}\/status\/\d+"
 
-			    # Find urls in text; we use a separate process for this
+				# Find urls in text; we use a separate process for this
 				# simply so that we can time it out after a while;
 				# since the regex is so unwieldy and the text unpredictable,
 				# we run the risk of catastrophic backtracking;
@@ -163,36 +176,54 @@ def main() :
 				p.join(2) # Wait for 2 seconds or until process finishes
 				# If thread is still active
 				if p.is_alive():
-				    logger.error("    Regex to find url on %s in %s was taking too long; skipping this comment",comment.id,comment.submission.id)
-				    # Terminate
-				    p.terminate()
-				    p.join()
+					logger.error("    Regex to find url on %s in %s was taking too long; skipping this comment",comment.id,comment.submission.id)
+					# Terminate
+					p.terminate()
+					p.join()
 				try :
-				    urls = queue.get_nowait()
+					urls = queue.get_nowait()
 				except queueError.Empty as e :
-				    urls = []
+					urls = []
+					
+				if len(urls) > 0 :
+					logger.debug(f"    Found the following URLs in this comment:")
+					for u in urls:
+						logger.debug(f"      {u[:url_logging_truncate]}")
 
-				logger.debug('    Found the following URLs in this comment: %s', str(urls))
 				# loop through any urls and see if any resolve into twitter status (tweet) links
 				tweet_links = []
 				for url in urls :
+					logger.debug("    ----------")
+					logger.debug(f"    checking url {str(url[0])}")
 					url = url[0] # the list of urls is actually a list of tuples, and we just want the first string within the tuple, which is the url itself
+
+					queue = multiprocessing.Queue()
+					p = multiprocessing.Process(target=resolveRedirects, args=(url, queue))
+					p.start()
+					p.join(10) # Wait for 10 seconds or until process finishes
+					# If thread is still active
+					if p.is_alive():
+						logger.error(f"    Resolving redirects timed out")
+						# Terminate
+						p.terminate()
+						p.join()
 					try :
-						# follow any redirects and store that url
-						session = requests.Session()
-						resp = session.head(url, allow_redirects=True) # follow any redirects
-						resolved_url = resp.url # save the redirected url
-					except requests.exceptions.RequestException as e :
-						logger.debug("    Using %s as found, problem with redirect detection: %s", url, str(e))
+						resolved_url = queue.get_nowait()
+					except queueError.Empty as e :
 						resolved_url = url
+
+
 					try :
 						# test to see if the resolved url is a twitter link
+						logger.debug(f"    checking if {resolved_url[:url_logging_truncate]}... is a tweet link...")
 						tweet_links.append(re.match(regex_tweet,resolved_url).group(0))
+						logger.debug(f"    {resolved_url[:url_logging_truncate]}... is a tweet link!")
 					except AttributeError as e :
-						logger.debug('    no match to add to tweet_links in %s', resolved_url)
+						logger.debug(f"    {resolved_url[:url_logging_truncate]}... is NOT a tweet link")
 					except TypeError as e :
-						logger.debug('    error appending tweet link: %s', str(e))
+						logger.debug(f"    error appending tweet link: {str(e)}")
 						#tweet_links.append(re.match(regex_tweet,url).group(0))
+
 					#except :
 				if tweet_links : # if tweet_links is not empty
 					logger.info('#### Comment ID: %s (Submission %s) ####',comment.id,comment.submission.id)
@@ -201,14 +232,14 @@ def main() :
 				# now loop through any twitter links we found in this comment
 				# and post replies to them
 				for tweet_link in tweet_links :
+					logger.debug("looping through any twitter links we found and (not) commenting on them")
 					# will have to modify alreadyDone() to be able to handle comments
 					# particularly, it'll have to somehow handle the possibility of multiple replies
 					# in the case that there are multiple links to reply to
 					# if not alreadyDone(comment) :
 					# 	composeReply(tweet_link, s.id, comment.id)
 					pass
-
-
+					
 	except prawcore.exceptions.OAuthException as e:
 		logger.critical('EXITING! Could not log in to reddit: %s',str(e))
 		raise SystemExit('Quitting - could not log in to reddit') # if we can't deal with reddit, just stop altogether, and let it try again next time
@@ -566,12 +597,26 @@ def resolveLink(tweet) :
 def findURLs(pattern, text, return_queue) :
 	return_queue.put(regex.findall(pattern,text)) # use the regex library instead of the re library because the regex_url pattern uses a possessive quantifier
 
+def resolveRedirects(url, return_queue) :
+	try :
+		# follow any redirects and store that url
+		logger.debug("    resolving any redirects...")
+		session = requests.Session()
+		resp = session.head(url, allow_redirects=True) # follow any redirects
+		resolved_url = resp.url # save the redirected url
+		logger.debug(f"    resolved url: {resolved_url[:url_logging_truncate]}...")
+	except requests.exceptions.RequestException as e :
+		logger.debug(f"    Using {url[:url_logging_truncate]}... as found, problem with redirect detection: {str(e)}")
+		resolved_url = url
+	return_queue.put(resolved_url)
+
+
 def download(url) :
 	try :
 		req = requests.get(url)
 		filename = 'temp/' + url.split('/')[-1]
 		with open(filename,'wb') as file:
-		    file.write(req.content)
+			file.write(req.content)
 	except Exception as e:
 		e.custom = 'Unable to download file ' + url
 		raise
@@ -580,4 +625,4 @@ def download(url) :
 		return filename
 
 if __name__ == "__main__":
-    main()
+	main()
